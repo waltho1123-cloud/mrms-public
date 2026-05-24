@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  uploaded
+  queued
+  transcribing
+  summarizing
+  review
+  pushing
+  completed
+  push_failed
+  error
+}
+
+enum LogLevel {
+  info
+  warn
+  error
+}
+
+model MeetingTask {
+  id             String     @id @default(uuid())
+  meetingTopic   String
+  meetingDate    DateTime   @default(now())
+  participants   String?
+  audioFilePath  String
+  audioFileSize  Int
+  audioDuration  Int?
+  status         TaskStatus @default(uploaded)
+  progressPct    Int        @default(0)
+  errorMsg       String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  transcript  Transcript?
+  minutes     Minutes[]
+  pushLogs    PushLog[]
+  systemLogs  SystemLog[]
+}
+
+model Transcript {
+  id              String   @id @default(uuid())
+  taskId          String   @unique
+  task            MeetingTask @relation(fields: [taskId], references: [id])
+  rawText         String
+  language        String?  @default("zh")
+  durationSeconds Int?
+  wordCount       Int?
+  segments        Json?
+  createdAt       DateTime @default(now())
+}
+
+model Minutes {
+  id                String   @id @default(uuid())
+  taskId            String
+  task              MeetingTask @relation(fields: [taskId], references: [id])
+  promptTemplateId  String?
+  promptTemplate    PromptTemplate? @relation(fields: [promptTemplateId], references: [id])
+  summary           String
+  keyPoints         String
+  sentimentAnalysis String
+  actionItems       String
+  markdownOutput    String
+  createdAt         DateTime @default(now())
+}
+
+model PromptTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  content     String
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  minutes Minutes[]
+}
+
+model DingTalkWebhook {
+  id         String   @id @default(uuid())
+  name       String
+  webhookUrl String
+  secret     String
+  isDefault  Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  pushLogs PushLog[]
+}
+
+model PushLog {
+  id           String   @id @default(uuid())
+  taskId       String
+  task         MeetingTask @relation(fields: [taskId], references: [id])
+  webhookId    String
+  webhook      DingTalkWebhook @relation(fields: [webhookId], references: [id])
+  status       String
+  responseCode Int?
+  responseBody String?
+  retryCount   Int      @default(0)
+  sentAt       DateTime @default(now())
+}
+
+model SystemLog {
+  id        String       @id @default(uuid())
+  taskId    String?
+  task      MeetingTask? @relation(fields: [taskId], references: [id])
+  level     LogLevel
+  stage     String
+  message   String
+  metadata  Json?
+  createdAt DateTime     @default(now())
+}
+
+model AdminUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         String    @default("admin")
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+}
