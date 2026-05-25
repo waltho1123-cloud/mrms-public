@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "start": "prisma db push --skip-generate && next start",
+    "start": "prisma db push --skip-generate && concurrently -k -n web,worker -c blue,magenta \"next start\" \"npx tsx src/lib/queue/start-worker.ts\"",
     "lint": "eslint",
     "worker": "npx tsx src/lib/queue/start-worker.ts",
     "seed": "npx tsx prisma/seed.ts",
@@ -18,6 +18,7 @@
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.71.0",
+    "concurrently": "^9.2.1",
     "ioredis": "^5.10.0",
     "next": "16.1.6",
     "openai": "^6.29.0",
