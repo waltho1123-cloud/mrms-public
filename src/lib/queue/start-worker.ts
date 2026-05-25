@@ -11,7 +11,6 @@ dotenv.config({ override: true });
 // Dynamic import AFTER dotenv is loaded, so all services read correct env vars
 async function main() {
   console.log('[MRMS Worker] Starting worker process...');
-  console.log('[MRMS Worker] ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY ? 'set' : 'NOT SET');
   console.log('[MRMS Worker] OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'set' : 'NOT SET');
 
   const { createWorker } = await import('./worker');

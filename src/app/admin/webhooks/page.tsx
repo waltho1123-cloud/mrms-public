@@ -55,7 +55,8 @@ export default function WebhooksPage() {
       });
       if (!res.ok) throw new Error('載入失敗');
       const data = await res.json();
-      setWebhooks(data.data || data || []);
+      const raw = data?.data ?? data;
+      setWebhooks(Array.isArray(raw) ? raw : []);
     } catch {
       // API not ready
     } finally {

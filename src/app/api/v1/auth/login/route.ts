@@ -26,13 +26,34 @@ export async function POST(request: NextRequest) {
       throw new AppError('ERR_VALIDATION', 'Input too long', 400);
     }
 
-    // Find admin user
-    const user = await prisma.adminUser.findUnique({
-      where: { email: email.toLowerCase() },
-    });
+    if (!process.env.DATABASE_URL) {
+      throw new AppError(
+        'ERR_CONFIG',
+        'DATABASE_URL 未設定，請於 Zeabur Service Variables（或本機 .env）設定後重新部署',
+        503
+      );
+    }
+
+    let user;
+    try {
+      user = await prisma.user.findUnique({
+        where: { email: email.toLowerCase() },
+      });
+    } catch (dbErr) {
+      const message = dbErr instanceof Error ? dbErr.message : String(dbErr);
+      throw new AppError(
+        'ERR_CONFIG',
+        `資料庫連線失敗，請確認 DATABASE_URL 與 PostgreSQL 是否正常運作。詳細: ${message.split('\n')[0]}`,
+        503
+      );
+    }
 
     if (!user) {
       throw new AppError('ERR_AUTH', 'Invalid email or password', 401);
+    }
+
+    if (user.status === 'disabled') {
+      throw new AppError('ERR_AUTH', '帳號已被停用', 403);
     }
 
     // Verify password
@@ -42,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update last login
-    await prisma.adminUser.update({
+    await prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });

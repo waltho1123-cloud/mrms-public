@@ -4,17 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "build": "prisma generate && next build",
+    "start": "prisma db push --skip-generate && next start",
     "lint": "eslint",
     "worker": "npx tsx src/lib/queue/start-worker.ts",
     "seed": "npx tsx prisma/seed.ts",
     "db:migrate": "npx prisma migrate dev",
     "db:generate": "npx prisma generate",
+    "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.71.0",

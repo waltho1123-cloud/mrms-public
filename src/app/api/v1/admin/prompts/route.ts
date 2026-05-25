@@ -5,12 +5,12 @@
 
 import { NextRequest } from 'next/server';
 import { errorResponse, AppError } from '@/lib/utils/errors';
-import { requireAuth } from '@/lib/utils/auth';
+import { requireAdmin } from '@/lib/utils/auth';
 import prisma from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request);
+    await requireAdmin(request);
 
     const templates = await prisma.promptTemplate.findMany({
       orderBy: { createdAt: 'desc' },
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth(request);
+    await requireAdmin(request);
 
     const body = await request.json();
     const { name, description, content, isDefault } = body;

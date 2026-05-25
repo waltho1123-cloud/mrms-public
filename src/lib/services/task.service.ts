@@ -67,6 +67,7 @@ export async function transitionStatus(
  * Create a new meeting task
  */
 export async function createTask(data: {
+  userId: string;
   meetingTopic: string;
   meetingDate?: Date;
   participants?: string;
@@ -75,6 +76,7 @@ export async function createTask(data: {
 }): Promise<string> {
   const task = await prisma.meetingTask.create({
     data: {
+      userId: data.userId,
       meetingTopic: data.meetingTopic,
       meetingDate: data.meetingDate ?? new Date(),
       participants: data.participants,
@@ -121,6 +123,7 @@ export async function getTaskById(taskId: string) {
  * List tasks with cursor-based pagination and optional filters
  */
 export async function listTasks(params: {
+  userId?: string;
   cursor?: string;
   limit?: number;
   topic?: string;
@@ -130,6 +133,7 @@ export async function listTasks(params: {
   const limit = Math.min(params.limit ?? 20, 100);
 
   const where: Record<string, unknown> = {};
+  if (params.userId) where.userId = params.userId;
 
   if (params.topic) {
     where.meetingTopic = { contains: params.topic, mode: 'insensitive' };

@@ -15,12 +15,14 @@ interface JWTPayload {
 function getJwtSecret(): string {
   const secret = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET;
   if (!secret) {
-    throw new Error('[SECURITY] NEXTAUTH_SECRET or JWT_SECRET environment variable must be set.');
+    throw new AppError(
+      'ERR_CONFIG',
+      'NEXTAUTH_SECRET 未設定，請於 Zeabur Service Variables（或本機 .env）設定後重新部署',
+      503
+    );
   }
   return secret;
 }
-
-const JWT_SECRET = getJwtSecret();
 
 /**
  * Base64url encode
@@ -69,7 +71,7 @@ export async function createToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): Pro
 
   const header = base64urlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const body = base64urlEncode(JSON.stringify(fullPayload));
-  const signature = await hmacSign(`${header}.${body}`, JWT_SECRET);
+  const signature = await hmacSign(`${header}.${body}`, getJwtSecret());
 
   return `${header}.${body}.${signature}`;
 }
@@ -84,7 +86,7 @@ export async function verifyToken(token: string): Promise<JWTPayload> {
   }
 
   const [header, body, signature] = parts;
-  const expectedSig = await hmacSign(`${header}.${body}`, JWT_SECRET);
+  const expectedSig = await hmacSign(`${header}.${body}`, getJwtSecret());
 
   // Timing-safe comparison to prevent timing attacks
   const { timingSafeEqual } = await import('crypto');
@@ -115,4 +117,26 @@ export async function requireAuth(request: Request): Promise<JWTPayload> {
 
   const token = authHeader.slice(7);
   return verifyToken(token);
+}
+
+/**
+ * Require any authenticated user (admin or normal user).
+ */
+export async function requireUser(request: Request): Promise<JWTPayload> {
+  const payload = await requireAuth(request);
+  if (payload.role !== 'user' && payload.role !== 'admin') {
+    throw new AppError('ERR_AUTH', 'Unrecognized role', 403);
+  }
+  return payload;
+}
+
+/**
+ * Require admin role specifically.
+ */
+export async function requireAdmin(request: Request): Promise<JWTPayload> {
+  const payload = await requireAuth(request);
+  if (payload.role !== 'admin') {
+    throw new AppError('ERR_FORBIDDEN', '需要 admin 權限', 403);
+  }
+  return payload;
 }

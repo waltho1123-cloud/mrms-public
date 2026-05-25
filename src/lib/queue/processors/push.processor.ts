@@ -10,6 +10,7 @@ import { getErrorMessage } from '@/lib/utils/format';
 
 export async function processPush(
   taskId: string,
+  userId: string,
   webhookId?: string,
   markdownOverride?: string
 ): Promise<void> {
@@ -39,6 +40,7 @@ export async function processPush(
 
     const results = await pushToLine({
       taskId,
+      userId,
       webhookId,
       markdownTitle: `會議紀錄 - ${task.meetingTopic}`,
       markdownContent,

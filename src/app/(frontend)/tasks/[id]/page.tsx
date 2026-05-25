@@ -13,6 +13,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useSSE } from '@/lib/hooks/useSSE';
 import type { TaskStatus, PromptTemplateBase } from '@/lib/types';
 import { formatDate, formatDateTime, formatDuration, formatFileSize } from '@/lib/utils/format';
+import { getAuthHeaders, getStoredToken } from '@/lib/utils/admin-fetch';
 
 interface Task {
   id: string;
@@ -74,7 +75,11 @@ export default function TaskDetailPage() {
   // Fetch task
   const fetchTask = useCallback(async () => {
     try {
-      const res = await fetch(`/api/v1/tasks/${taskId}`);
+      const res = await fetch(`/api/v1/tasks/${taskId}`, { headers: getAuthHeaders() });
+      if (res.status === 401) {
+        router.replace(`/login?next=/tasks/${taskId}`);
+        return;
+      }
       if (!res.ok) throw new Error('無法載入任務');
       const data = await res.json();
       setTask(data.data || data);
@@ -89,19 +94,23 @@ export default function TaskDetailPage() {
     fetchTask();
   }, [fetchTask]);
 
-  // Fetch prompts for regenerate
+  // Fetch prompts for regenerate (auth required to include personal templates)
   useEffect(() => {
-    fetch('/api/v1/prompts')
+    fetch('/api/v1/prompts', { headers: getAuthHeaders() })
       .then((r) => r.json())
-      .then((data) => setPrompts(data.data || data || []))
+      .then((data) => {
+        const raw = data?.data ?? data;
+        setPrompts(Array.isArray(raw) ? raw : []);
+      })
       .catch(() => {});
   }, []);
 
-  // SSE for live updates
+  // SSE for live updates — token must be in URL (EventSource limitation)
   const isTerminal = task?.status === 'completed' || task?.status === 'error';
+  const sseToken = typeof window !== 'undefined' ? getStoredToken() : null;
   useSSE({
-    url: `/api/v1/tasks/${taskId}/sse`,
-    enabled: !isTerminal && !!task,
+    url: sseToken ? `/api/v1/tasks/${taskId}/sse?token=${encodeURIComponent(sseToken)}` : '',
+    enabled: !isTerminal && !!task && !!sseToken,
     onMessage: useCallback(
       (event: { event: string; data: unknown }) => {
         if (!event.data || typeof event.data !== 'object') return;
@@ -134,7 +143,10 @@ export default function TaskDetailPage() {
   const handlePush = async () => {
     setPushing(true);
     try {
-      const res = await fetch(`/api/v1/tasks/${taskId}/push`, { method: 'POST' });
+      const res = await fetch(`/api/v1/tasks/${taskId}/push`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
       if (!res.ok) throw new Error('推送失敗');
       fetchTask();
     } catch {
@@ -153,7 +165,7 @@ export default function TaskDetailPage() {
     try {
       const res = await fetch(`/api/v1/tasks/${taskId}/regenerate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ promptTemplateId: selectedPrompt }),
       });
       if (!res.ok) throw new Error('重新整理失敗');
@@ -170,7 +182,7 @@ export default function TaskDetailPage() {
     try {
       const res = await fetch(`/api/v1/tasks/${taskId}/push`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ markdownOverride: editContent }),
       });
       if (!res.ok) throw new Error('推送失敗');

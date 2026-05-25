@@ -10,6 +10,7 @@ import { getErrorMessage } from '@/lib/utils/format';
 
 export async function processSummarization(
   taskId: string,
+  userId: string,
   meetingTopic: string,
   meetingDate: string,
   participants?: string,
@@ -28,6 +29,7 @@ export async function processSummarization(
     }
 
     const { result, promptTemplateId: usedTemplateId } = await summarizeMeeting(
+      userId,
       {
         meetingTopic,
         meetingDate,

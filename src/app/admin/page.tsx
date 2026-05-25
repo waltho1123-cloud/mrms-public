@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
+import { storeAuth } from '@/lib/utils/admin-fetch';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -30,18 +31,20 @@ export default function AdminLoginPage() {
         throw new Error(data.error?.message || '登入失敗');
       }
 
-      // Store token and user info
       const token = data.token || data.data?.token;
       const user = data.user || data.data?.user;
 
-      if (token) {
-        localStorage.setItem('admin_token', token);
+      if (user && user.role !== 'admin') {
+        throw new Error('此登入入口僅限管理員。一般使用者請至首頁登入。');
       }
-      if (user) {
-        localStorage.setItem(
-          'admin_user',
-          JSON.stringify({ email: user.email, name: user.name })
-        );
+
+      if (token && user) {
+        storeAuth(token, {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        });
       }
 
       router.replace('/admin/dashboard');
@@ -106,9 +109,9 @@ export default function AdminLoginPage() {
             />
 
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2">
                 <svg
-                  className="w-4 h-4 shrink-0"
+                  className="w-4 h-4 shrink-0 mt-0.5"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -118,7 +121,7 @@ export default function AdminLoginPage() {
                     clipRule="evenodd"
                   />
                 </svg>
-                {error}
+                <span className="break-words">{error}</span>
               </div>
             )}
 

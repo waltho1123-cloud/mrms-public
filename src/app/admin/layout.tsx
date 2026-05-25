@@ -3,11 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { clearAuth, getStoredToken, getStoredUser, StoredUser } from '@/lib/utils/admin-fetch';
 
-interface AdminUser {
-  email: string;
-  name: string;
-}
+type AdminUser = StoredUser;
 
 export default function AdminLayout({
   children,
@@ -24,14 +22,15 @@ export default function AdminLayout({
   const isLoginPage = pathname === '/admin';
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null;
-    const storedUser = typeof window !== 'undefined' ? localStorage.getItem('admin_user') : null;
+    const token = getStoredToken();
+    const stored = getStoredUser();
 
-    if (token && storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch {
-        // Invalid stored user
+    if (token && stored) {
+      if (stored.role !== 'admin') {
+        // Logged in but not admin — bounce to home
+        router.replace('/');
+      } else {
+        setUser(stored);
       }
     } else if (!isLoginPage) {
       router.replace('/admin');
@@ -40,8 +39,7 @@ export default function AdminLayout({
   }, [isLoginPage, router]);
 
   const handleLogout = () => {
-    localStorage.removeItem('admin_token');
-    localStorage.removeItem('admin_user');
+    clearAuth();
     setUser(null);
     router.replace('/admin');
   };
@@ -80,6 +78,11 @@ export default function AdminLayout({
       href: '/admin/webhooks',
       label: 'Webhook 設定',
       icon: WebhookIcon,
+    },
+    {
+      href: '/admin/setup',
+      label: '系統設定',
+      icon: KeyIcon,
     },
     {
       href: '/admin/logs',
@@ -201,7 +204,7 @@ export default function AdminLayout({
           {/* User info */}
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <p className="text-sm font-medium text-gray-900">{user.name}</p>
+              <p className="text-sm font-medium text-gray-900">{user.name || user.email}</p>
               <p className="text-xs text-gray-500">{user.email}</p>
             </div>
             <button
@@ -255,6 +258,19 @@ function WebhookIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+      />
+    </svg>
+  );
+}
+
+function KeyIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
       />
     </svg>
   );

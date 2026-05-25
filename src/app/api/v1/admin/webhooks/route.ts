@@ -1,31 +1,47 @@
 /**
- * GET  /api/v1/admin/webhooks     - List all LINE Bot configurations
- * POST /api/v1/admin/webhooks     - Create a new LINE Bot configuration
+ * GET  /api/v1/admin/webhooks - List the calling admin's webhooks
+ * POST /api/v1/admin/webhooks - Create a webhook owned by the calling admin
+ *
+ * NOTE: This is the legacy admin-scoped endpoint kept for the existing
+ * /admin/webhooks page. In Phase 5 it will be moved to /api/v1/me/webhooks
+ * (per-user). For now it operates on the calling user's own UserWebhook rows.
  */
 
 import { NextRequest } from 'next/server';
 import { errorResponse, AppError } from '@/lib/utils/errors';
-import { requireAuth } from '@/lib/utils/auth';
+import { requireUser } from '@/lib/utils/auth';
 import prisma from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request);
+    const me = await requireUser(request);
 
-    const webhooks = await prisma.dingTalkWebhook.findMany({
+    const webhooks = await prisma.userWebhook.findMany({
+      where: { userId: me.sub },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         name: true,
-        webhookUrl: true,
-        // Omit secret from listing for security
+        groupId: true,
+        // accessToken intentionally omitted from listing
         isDefault: true,
         isActive: true,
         createdAt: true,
       },
     });
 
-    return Response.json({ data: webhooks });
+    // Shape the response to match the old client expectations
+    // (the page still expects `webhookUrl` — we'll rename in Phase 5)
+    return Response.json({
+      data: webhooks.map((w) => ({
+        id: w.id,
+        name: w.name,
+        webhookUrl: w.groupId, // legacy field name
+        isDefault: w.isDefault,
+        isActive: w.isActive,
+        createdAt: w.createdAt,
+      })),
+    });
   } catch (error) {
     return errorResponse(error);
   }
@@ -33,12 +49,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth(request);
+    const me = await requireUser(request);
 
     const body = await request.json();
     const { name, webhookUrl, secret, isDefault } = body;
+    const groupId = webhookUrl; // legacy client sends groupId as `webhookUrl`
+    const accessToken = secret; // legacy client sends LINE Channel token as `secret`
 
-    if (!name || !webhookUrl || !secret) {
+    if (!name || !groupId || !accessToken) {
       throw new AppError('ERR_VALIDATION', 'name, webhookUrl, and secret are required', 400);
     }
 
@@ -46,19 +64,19 @@ export async function POST(request: NextRequest) {
       throw new AppError('ERR_VALIDATION', 'name must be 100 characters or less', 400);
     }
 
-    // If setting as default, unset other defaults first
     if (isDefault) {
-      await prisma.dingTalkWebhook.updateMany({
-        where: { isDefault: true },
+      await prisma.userWebhook.updateMany({
+        where: { userId: me.sub, isDefault: true },
         data: { isDefault: false },
       });
     }
 
-    const webhook = await prisma.dingTalkWebhook.create({
+    const webhook = await prisma.userWebhook.create({
       data: {
+        userId: me.sub,
         name,
-        webhookUrl,
-        secret,
+        groupId,
+        accessToken,
         isDefault: isDefault ?? false,
         isActive: true,
       },
@@ -69,7 +87,7 @@ export async function POST(request: NextRequest) {
         data: {
           id: webhook.id,
           name: webhook.name,
-          webhookUrl: webhook.webhookUrl,
+          webhookUrl: webhook.groupId, // legacy
           isDefault: webhook.isDefault,
           isActive: webhook.isActive,
           createdAt: webhook.createdAt,

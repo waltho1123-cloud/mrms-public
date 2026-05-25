@@ -1,11 +1,14 @@
 /**
- * PUT    /api/v1/admin/webhooks/:id - Update a webhook
- * DELETE /api/v1/admin/webhooks/:id - Delete a webhook
+ * PUT    /api/v1/admin/webhooks/:id - Update a webhook owned by the calling user
+ * DELETE /api/v1/admin/webhooks/:id - Delete it
+ *
+ * Per-user scope: a webhook can only be touched by its owner. Phase 5 will
+ * relocate this to /api/v1/me/webhooks/:id.
  */
 
 import { NextRequest } from 'next/server';
 import { errorResponse, AppError } from '@/lib/utils/errors';
-import { requireAuth } from '@/lib/utils/auth';
+import { requireUser } from '@/lib/utils/auth';
 import prisma from '@/lib/db';
 
 export async function PUT(
@@ -13,10 +16,12 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request);
+    const me = await requireUser(request);
     const { id } = await params;
 
-    const existing = await prisma.dingTalkWebhook.findUnique({ where: { id } });
+    const existing = await prisma.userWebhook.findFirst({
+      where: { id, userId: me.sub },
+    });
     if (!existing) {
       throw new AppError('ERR_NOT_FOUND', `Webhook not found: ${id}`, 404);
     }
@@ -24,20 +29,19 @@ export async function PUT(
     const body = await request.json();
     const { name, webhookUrl, secret, isDefault, isActive } = body;
 
-    // If setting as default, unset other defaults first
     if (isDefault === true) {
-      await prisma.dingTalkWebhook.updateMany({
-        where: { isDefault: true, id: { not: id } },
+      await prisma.userWebhook.updateMany({
+        where: { userId: me.sub, isDefault: true, id: { not: id } },
         data: { isDefault: false },
       });
     }
 
-    const updated = await prisma.dingTalkWebhook.update({
+    const updated = await prisma.userWebhook.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
-        ...(webhookUrl !== undefined && { webhookUrl }),
-        ...(secret !== undefined && { secret }),
+        ...(webhookUrl !== undefined && { groupId: webhookUrl }),
+        ...(secret !== undefined && { accessToken: secret }),
         ...(isDefault !== undefined && { isDefault }),
         ...(isActive !== undefined && { isActive }),
       },
@@ -47,7 +51,7 @@ export async function PUT(
       data: {
         id: updated.id,
         name: updated.name,
-        webhookUrl: updated.webhookUrl,
+        webhookUrl: updated.groupId,
         isDefault: updated.isDefault,
         isActive: updated.isActive,
         createdAt: updated.createdAt,
@@ -63,15 +67,17 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request);
+    const me = await requireUser(request);
     const { id } = await params;
 
-    const existing = await prisma.dingTalkWebhook.findUnique({ where: { id } });
+    const existing = await prisma.userWebhook.findFirst({
+      where: { id, userId: me.sub },
+    });
     if (!existing) {
       throw new AppError('ERR_NOT_FOUND', `Webhook not found: ${id}`, 404);
     }
 
-    await prisma.dingTalkWebhook.delete({ where: { id } });
+    await prisma.userWebhook.delete({ where: { id } });
 
     return Response.json({ data: { message: 'Webhook deleted' } });
   } catch (error) {

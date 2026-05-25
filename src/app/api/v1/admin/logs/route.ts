@@ -6,12 +6,12 @@
 import { NextRequest } from 'next/server';
 import { LogLevel } from '@prisma/client';
 import { errorResponse } from '@/lib/utils/errors';
-import { requireAuth } from '@/lib/utils/auth';
+import { requireAdmin } from '@/lib/utils/auth';
 import prisma from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request);
+    await requireAdmin(request);
 
     const { searchParams } = request.nextUrl;
     const level = searchParams.get('level') as LogLevel | null;

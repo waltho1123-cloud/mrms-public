@@ -41,7 +41,8 @@ export default function PromptsPage() {
       });
       if (!res.ok) throw new Error('載入失敗');
       const data = await res.json();
-      setPrompts(data.data || data || []);
+      const raw = data?.data ?? data;
+      setPrompts(Array.isArray(raw) ? raw : []);
     } catch {
       // API not ready
     } finally {

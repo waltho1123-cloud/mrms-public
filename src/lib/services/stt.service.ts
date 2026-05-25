@@ -10,10 +10,17 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import OpenAI from 'openai';
 import { STT_MAX_FILE_SIZE } from '@/lib/utils/constants';
+import { getApiKey } from '@/lib/settings/api-keys';
 
 const execFileAsync = promisify(execFile);
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+async function getOpenAI(userId: string): Promise<OpenAI> {
+  const apiKey = await getApiKey(userId, 'OPENAI_API_KEY');
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY 未設定，請於設定頁填入您自己的 OpenAI API key');
+  }
+  return new OpenAI({ apiKey });
+}
 
 export interface TranscriptSegment {
   start: number;
@@ -42,10 +49,11 @@ interface TranscriptionResponseExt {
 /**
  * Transcribe a single audio file via OpenAI
  */
-async function transcribeSingle(filePath: string, retries = 3): Promise<OpenAI.Audio.Transcription> {
+async function transcribeSingle(userId: string, filePath: string, retries = 3): Promise<OpenAI.Audio.Transcription> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const fileStream = fs.createReadStream(filePath);
+      const openai = await getOpenAI(userId);
       const transcription = await openai.audio.transcriptions.create({
         model: 'gpt-4o-mini-transcribe',
         file: fileStream,
@@ -169,7 +177,7 @@ async function normalizeAudio(filePath: string): Promise<string> {
  * Main transcription entry point.
  * Normalizes audio, then handles file splitting if > 25MB.
  */
-export async function transcribeAudio(filePath: string): Promise<TranscriptionResult> {
+export async function transcribeAudio(userId: string, filePath: string): Promise<TranscriptionResult> {
   // Normalize audio to ensure OpenAI compatibility
   const normalizedPath = await normalizeAudio(filePath);
   const fileSize = fs.statSync(normalizedPath).size;
@@ -200,7 +208,7 @@ export async function transcribeAudio(filePath: string): Promise<TranscriptionRe
 
   try {
     for (const chunk of chunks) {
-      const result = await transcribeSingle(chunk) as unknown as TranscriptionResponseExt;
+      const result = await transcribeSingle(userId, chunk) as unknown as TranscriptionResponseExt;
 
       if (result.language) {
         language = result.language;
@@ -234,10 +242,15 @@ export async function transcribeAudio(filePath: string): Promise<TranscriptionRe
 
   const wordCount = fullText.replace(/\s+/g, '').length;
 
+  // OpenAI gpt-4o-mini-transcribe doesn't return duration in its JSON
+  // response (only whisper-1 + verbose_json does), so totalDuration from
+  // the API will be 0. Fall back to ffprobe on the source file.
+  const finalDuration = totalDuration > 0 ? Math.ceil(totalDuration) : duration;
+
   return {
     rawText: fullText,
     language,
-    durationSeconds: Math.ceil(totalDuration),
+    durationSeconds: finalDuration,
     wordCount,
     segments: allSegments,
   };

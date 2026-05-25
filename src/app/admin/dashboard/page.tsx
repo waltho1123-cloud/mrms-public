@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { getAuthHeaders } from '@/lib/utils/admin-fetch';
 
 type Period = 'today' | 'week' | 'month';
 
@@ -22,9 +23,8 @@ export default function DashboardPage() {
   const fetchStats = useCallback(async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('admin_token');
       const res = await fetch(`/api/v1/admin/dashboard?period=${period}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: getAuthHeaders(),
       });
       if (!res.ok) throw new Error('載入失敗');
       const data = await res.json();

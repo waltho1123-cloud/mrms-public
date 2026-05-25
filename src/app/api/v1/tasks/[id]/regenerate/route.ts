@@ -4,6 +4,8 @@
 
 import { NextRequest } from 'next/server';
 import { errorResponse, AppError } from '@/lib/utils/errors';
+import { requireUser } from '@/lib/utils/auth';
+import { assertPromptAccessible } from '@/lib/services/ai.service';
 import prisma from '@/lib/db';
 import meetingQueue from '@/lib/queue/queue';
 
@@ -12,14 +14,15 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const me = await requireUser(request);
     const { id: taskId } = await params;
 
-    // Verify task exists
+    // Verify task exists and is owned by caller (admin may regenerate any)
     const task = await prisma.meetingTask.findUnique({
       where: { id: taskId },
     });
 
-    if (!task) {
+    if (!task || (me.role !== 'admin' && task.userId !== me.sub)) {
       throw new AppError('ERR_NOT_FOUND', `Task not found: ${taskId}`, 404);
     }
 
@@ -41,16 +44,11 @@ export async function POST(
       throw new AppError('ERR_VALIDATION', 'promptTemplateId is required', 400);
     }
 
-    // Verify transcript and prompt template exist in parallel
-    const [transcript, template] = await Promise.all([
-      prisma.transcript.findUnique({
-        where: { taskId },
-      }),
-      prisma.promptTemplate.findUnique({
-        where: { id: promptTemplateId },
-      }),
-    ]);
-
+    // Verify transcript exists, and that the prompt is accessible to the
+    // task's owner. We scope to task.userId (not me.sub) because the worker
+    // will run as the task owner — an admin shouldn't be able to bind a
+    // user's task to a prompt that user has no access to.
+    const transcript = await prisma.transcript.findUnique({ where: { taskId } });
     if (!transcript) {
       throw new AppError(
         'ERR_PREREQUISITE',
@@ -58,14 +56,12 @@ export async function POST(
         400
       );
     }
+    await assertPromptAccessible(task.userId, promptTemplateId);
 
-    if (!template || !template.isActive) {
-      throw new AppError('ERR_NOT_FOUND', 'Prompt template not found or inactive', 404);
-    }
-
-    // Add regenerate job to queue
+    // Add regenerate job to queue — uses task owner's OpenAI key
     await meetingQueue.add('regenerate' as string, {
       taskId,
+      userId: task.userId,
       promptTemplateId,
       type: 'regenerate' as const,
     });

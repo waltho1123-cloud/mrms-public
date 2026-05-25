@@ -19,6 +19,7 @@ export const QUEUE_NAME = 'meeting-processing';
 
 export interface MeetingJobData {
   taskId: string;
+  userId: string;
   audioFilePath: string;
   meetingTopic: string;
   meetingDate: string;
@@ -30,12 +31,14 @@ export interface MeetingJobData {
 
 export interface RegenerateJobData {
   taskId: string;
+  userId: string;
   promptTemplateId: string;
   type: 'regenerate';
 }
 
 export interface PushJobData {
   taskId: string;
+  userId: string;
   webhookId?: string;
   markdownOverride?: string;
   type: 'push';

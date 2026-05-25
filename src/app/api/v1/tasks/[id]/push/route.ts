@@ -4,6 +4,7 @@
 
 import { NextRequest } from 'next/server';
 import { errorResponse, AppError } from '@/lib/utils/errors';
+import { requireUser } from '@/lib/utils/auth';
 import prisma from '@/lib/db';
 import meetingQueue from '@/lib/queue/queue';
 
@@ -12,14 +13,15 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const me = await requireUser(request);
     const { id: taskId } = await params;
 
-    // Verify task exists
+    // Verify task exists and is owned by caller (admin can push any)
     const task = await prisma.meetingTask.findUnique({
       where: { id: taskId },
     });
 
-    if (!task) {
+    if (!task || (me.role !== 'admin' && task.userId !== me.sub)) {
       throw new AppError('ERR_NOT_FOUND', `Task not found: ${taskId}`, 404);
     }
 
@@ -54,9 +56,10 @@ export async function POST(
       // Empty body is OK - use defaults
     }
 
-    // Add push job to queue
+    // Add push job to queue — runs as the task owner so worker uses their webhook
     await meetingQueue.add('push' as string, {
       taskId,
+      userId: task.userId,
       webhookId,
       markdownOverride,
       type: 'push' as const,

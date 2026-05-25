@@ -8,6 +8,7 @@ import Pagination from '@/components/ui/Pagination';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import type { TaskStatus } from '@/lib/types';
 import { formatDate } from '@/lib/utils/format';
+import { getAuthHeaders, getStoredUser } from '@/lib/utils/admin-fetch';
 
 interface TaskItem {
   id: string;
@@ -23,6 +24,15 @@ interface TaskItem {
 
 export default function HistoryPage() {
   const router = useRouter();
+
+  const [authChecked, setAuthChecked] = useState(false);
+  useEffect(() => {
+    if (!getStoredUser()) {
+      router.replace('/login?next=/history');
+    } else {
+      setAuthChecked(true);
+    }
+  }, [router]);
 
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +65,7 @@ export default function HistoryPage() {
         if (dateFrom) params.set('dateFrom', dateFrom);
         if (dateTo) params.set('dateTo', dateTo);
 
-        const res = await fetch(`/api/v1/tasks?${params}`);
+        const res = await fetch(`/api/v1/tasks?${params}`, { headers: getAuthHeaders() });
         if (!res.ok) throw new Error('載入失敗');
         const data = await res.json();
 
@@ -80,12 +90,15 @@ export default function HistoryPage() {
     [cursor, debouncedKeyword, dateFrom, dateTo]
   );
 
-  // Fetch on filter change
+  // Fetch on filter change (only after we know user is logged in)
   useEffect(() => {
+    if (!authChecked) return;
     setCursor(null);
     fetchTasks(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedKeyword, dateFrom, dateTo]);
+  }, [authChecked, debouncedKeyword, dateFrom, dateTo]);
+
+  if (!authChecked) return null;
 
   const timeSince = (dateStr: string) => {
     const created = new Date(dateStr).getTime();

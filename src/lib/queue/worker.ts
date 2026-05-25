@@ -28,23 +28,23 @@ async function processJob(job: Job<JobData>): Promise<void> {
 
   if (isMeetingJob(data)) {
     // Full pipeline: transcribe -> summarize -> (optional push)
-    const { taskId, audioFilePath, meetingTopic, meetingDate, participants, promptTemplateId, autoPush } = data;
+    const { taskId, userId, audioFilePath, meetingTopic, meetingDate, participants, promptTemplateId, autoPush } = data;
 
-    // Stage 1: Transcription
-    await processTranscription(taskId, audioFilePath);
+    // Stage 1: Transcription (uses owner's OpenAI key)
+    await processTranscription(taskId, userId, audioFilePath);
 
     // Stage 2: Summarization
-    await processSummarization(taskId, meetingTopic, meetingDate, participants, promptTemplateId);
+    await processSummarization(taskId, userId, meetingTopic, meetingDate, participants, promptTemplateId);
 
     // Stage 3: Push or Review
     if (autoPush) {
-      await processPush(taskId);
+      await processPush(taskId, userId);
     } else {
       await transitionStatus(taskId, 'review');
     }
   } else if (isRegenerateJob(data)) {
     // Re-summarize with a new prompt template
-    const { taskId, promptTemplateId } = data;
+    const { taskId, userId, promptTemplateId } = data;
     const task = await prisma.meetingTask.findUnique({
       where: { id: taskId },
       select: { meetingTopic: true, meetingDate: true, participants: true },
@@ -53,6 +53,7 @@ async function processJob(job: Job<JobData>): Promise<void> {
 
     await processSummarization(
       taskId,
+      userId,
       task.meetingTopic,
       task.meetingDate.toISOString(),
       task.participants ?? undefined,
@@ -62,8 +63,8 @@ async function processJob(job: Job<JobData>): Promise<void> {
     await transitionStatus(taskId, 'review');
   } else if (isPushJob(data)) {
     // Manual push
-    const { taskId, webhookId, markdownOverride } = data;
-    await processPush(taskId, webhookId, markdownOverride);
+    const { taskId, userId, webhookId, markdownOverride } = data;
+    await processPush(taskId, userId, webhookId, markdownOverride);
   }
 }
 

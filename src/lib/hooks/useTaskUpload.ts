@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
+import { getStoredToken } from '@/lib/utils/admin-fetch';
 
 interface UploadState {
   file: File | null;
@@ -107,6 +108,8 @@ export function useTaskUpload(): UseTaskUploadReturn {
           });
 
           xhr.open('POST', '/api/v1/tasks');
+          const token = getStoredToken();
+          if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
           xhr.send(formData);
         });
 

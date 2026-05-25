@@ -5,7 +5,7 @@
 
 import { NextRequest } from 'next/server';
 import { errorResponse } from '@/lib/utils/errors';
-import { requireAuth } from '@/lib/utils/auth';
+import { requireAdmin } from '@/lib/utils/auth';
 import prisma from '@/lib/db';
 
 function getPeriodStart(period: string): Date {
@@ -36,7 +36,7 @@ function getPeriodStart(period: string): Date {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request);
+    await requireAdmin(request);
 
     const period = request.nextUrl.searchParams.get('period') || 'today';
     const periodStart = getPeriodStart(period);

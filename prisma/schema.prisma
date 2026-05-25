@@ -25,42 +25,91 @@ enum LogLevel {
   error
 }
 
-model MeetingTask {
-  id             String     @id @default(uuid())
-  meetingTopic   String
-  meetingDate    DateTime   @default(now())
-  participants   String?
-  audioFilePath  String
-  audioFileSize  Int
-  audioDuration  Int?
-  status         TaskStatus @default(uploaded)
-  progressPct    Int        @default(0)
-  errorMsg       String?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String
+  name            String?
+  role            String    @default("user")     // 'user' | 'admin'
+  status          String    @default("active")   // 'active' | 'disabled'
+  emailVerifiedAt DateTime?
+  createdAt       DateTime  @default(now())
+  lastLoginAt     DateTime?
 
-  transcript  Transcript?
-  minutes     Minutes[]
-  pushLogs    PushLog[]
-  systemLogs  SystemLog[]
+  meetingTasks    MeetingTask[]
+  webhooks        UserWebhook[]
+  settings        UserSetting[]
+  promptTemplates PromptTemplate[]
+}
+
+model UserSetting {
+  userId    String
+  key       String          // 'OPENAI_API_KEY'（未來可擴展）
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, key])
+}
+
+model UserWebhook {
+  id          String   @id @default(uuid())
+  userId      String
+  name        String
+  groupId     String   // LINE group id
+  accessToken String   // LINE channel access token
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pushLogs PushLog[]
+
+  @@index([userId])
+}
+
+model MeetingTask {
+  id            String     @id @default(uuid())
+  userId        String
+  meetingTopic  String
+  meetingDate   DateTime   @default(now())
+  participants  String?
+  audioFilePath String
+  audioFileSize Int
+  audioDuration Int?
+  status        TaskStatus @default(uploaded)
+  progressPct   Int        @default(0)
+  errorMsg      String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id])
+  transcript Transcript?
+  minutes    Minutes[]
+  pushLogs   PushLog[]
+  systemLogs SystemLog[]
+
+  @@index([userId])
 }
 
 model Transcript {
-  id              String   @id @default(uuid())
-  taskId          String   @unique
+  id              String      @id @default(uuid())
+  taskId          String      @unique
   task            MeetingTask @relation(fields: [taskId], references: [id])
   rawText         String
-  language        String?  @default("zh")
+  language        String?     @default("zh")
   durationSeconds Int?
   wordCount       Int?
   segments        Json?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime    @default(now())
 }
 
 model Minutes {
-  id                String   @id @default(uuid())
+  id                String          @id @default(uuid())
   taskId            String
-  task              MeetingTask @relation(fields: [taskId], references: [id])
+  task              MeetingTask     @relation(fields: [taskId], references: [id])
   promptTemplateId  String?
   promptTemplate    PromptTemplate? @relation(fields: [promptTemplateId], references: [id])
   summary           String
@@ -68,11 +117,14 @@ model Minutes {
   sentimentAnalysis String
   actionItems       String
   markdownOutput    String
-  createdAt         DateTime @default(now())
+  createdAt         DateTime        @default(now())
 }
 
 model PromptTemplate {
   id          String   @id @default(uuid())
+  // null = system-wide (admin-managed, visible to everyone)
+  // non-null = owned by a single user, only visible to that user (+ admins)
+  userId      String?
   name        String
   description String?
   content     String
@@ -81,32 +133,23 @@ model PromptTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  user    User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   minutes Minutes[]
-}
 
-model DingTalkWebhook {
-  id         String   @id @default(uuid())
-  name       String
-  webhookUrl String
-  secret     String
-  isDefault  Boolean  @default(false)
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-
-  pushLogs PushLog[]
+  @@index([userId])
 }
 
 model PushLog {
-  id           String   @id @default(uuid())
+  id           String      @id @default(uuid())
   taskId       String
   task         MeetingTask @relation(fields: [taskId], references: [id])
   webhookId    String
-  webhook      DingTalkWebhook @relation(fields: [webhookId], references: [id])
+  webhook      UserWebhook @relation(fields: [webhookId], references: [id])
   status       String
   responseCode Int?
   responseBody String?
-  retryCount   Int      @default(0)
-  sentAt       DateTime @default(now())
+  retryCount   Int         @default(0)
+  sentAt       DateTime    @default(now())
 }
 
 model SystemLog {
@@ -118,14 +161,4 @@ model SystemLog {
   message   String
   metadata  Json?
   createdAt DateTime     @default(now())
-}
-
-model AdminUser {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  passwordHash String
-  name         String
-  role         String    @default("admin")
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
 }

@@ -14,13 +14,28 @@ import {
   MAX_FILE_SIZE_BYTES,
 } from '@/lib/utils/constants';
 import { createTask, listTasks, transitionStatus } from '@/lib/services/task.service';
+import { assertPromptAccessible } from '@/lib/services/ai.service';
 import meetingQueue from '@/lib/queue/queue';
+import { requireUser } from '@/lib/utils/auth';
+import { getApiKey } from '@/lib/settings/api-keys';
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/tmp/mrms-uploads';
 const AUTO_PUSH = process.env.AUTO_PUSH === 'true';
 
 export async function POST(request: NextRequest) {
   try {
+    const me = await requireUser(request);
+
+    // Gate: user must have their own OpenAI key before they can upload
+    const openaiKey = await getApiKey(me.sub, 'OPENAI_API_KEY');
+    if (!openaiKey) {
+      throw new AppError(
+        'ERR_CONFIG',
+        '請先到設定頁填入您的 OpenAI API key',
+        400
+      );
+    }
+
     const formData = await request.formData();
 
     // Extract fields
@@ -33,6 +48,12 @@ export async function POST(request: NextRequest) {
     // Validate required fields
     if (!audioFile) {
       throw new AppError('ERR_VALIDATION', 'audioFile is required', 400);
+    }
+
+    // If a specific prompt was selected, reject up-front. Otherwise the
+    // worker fails after we've already spent STT tokens on transcription.
+    if (promptTemplateId) {
+      await assertPromptAccessible(me.sub, promptTemplateId);
     }
     if (!meetingTopic || meetingTopic.trim() === '') {
       throw new AppError('ERR_VALIDATION', 'meetingTopic is required', 400);
@@ -93,8 +114,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create task in DB
+    // Create task in DB (owned by the calling user)
     const taskId = await createTask({
+      userId: me.sub,
       meetingTopic: meetingTopic.trim(),
       meetingDate: parsedMeetingDate,
       participants: participants?.trim() || undefined,
@@ -107,6 +129,7 @@ export async function POST(request: NextRequest) {
 
     await meetingQueue.add('process-meeting' as string, {
       taskId,
+      userId: me.sub,
       audioFilePath: filePath,
       meetingTopic: meetingTopic.trim(),
       meetingDate: meetingDate || new Date().toISOString(),
@@ -132,6 +155,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const me = await requireUser(request);
     const { searchParams } = request.nextUrl;
 
     const cursor = searchParams.get('cursor') || undefined;
@@ -141,7 +165,14 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get('dateFrom') || undefined;
     const dateTo = searchParams.get('dateTo') || undefined;
 
-    const result = await listTasks({ cursor, limit, topic, dateFrom, dateTo });
+    const result = await listTasks({
+      userId: me.role === 'admin' ? undefined : me.sub,
+      cursor,
+      limit,
+      topic,
+      dateFrom,
+      dateTo,
+    });
 
     return Response.json({ data: result });
   } catch (error) {

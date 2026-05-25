@@ -17,13 +17,13 @@ async function main() {
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@mrms.local';
   const adminPassword = process.env.ADMIN_PASSWORD || 'changeme123';
 
-  const existingAdmin = await prisma.adminUser.findUnique({
+  const existingAdmin = await prisma.user.findUnique({
     where: { email: adminEmail },
   });
 
   if (!existingAdmin) {
     const passwordHash = await bcrypt.hash(adminPassword, 12);
-    await prisma.adminUser.create({
+    await prisma.user.create({
       data: {
         email: adminEmail,
         passwordHash,
@@ -32,6 +32,12 @@ async function main() {
       },
     });
     console.log(`Admin user created: ${adminEmail}`);
+  } else if (existingAdmin.role !== 'admin') {
+    await prisma.user.update({
+      where: { email: adminEmail },
+      data: { role: 'admin' },
+    });
+    console.log(`Promoted existing user to admin: ${adminEmail}`);
   } else {
     console.log(`Admin user already exists: ${adminEmail}`);
   }

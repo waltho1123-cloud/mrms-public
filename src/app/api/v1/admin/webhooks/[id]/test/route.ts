@@ -4,7 +4,7 @@
 
 import { NextRequest } from 'next/server';
 import { errorResponse, AppError } from '@/lib/utils/errors';
-import { requireAuth } from '@/lib/utils/auth';
+import { requireUser } from '@/lib/utils/auth';
 import { testLineWebhook } from '@/lib/services/line.service';
 
 export async function POST(
@@ -12,10 +12,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request);
+    const me = await requireUser(request);
     const { id } = await params;
 
-    const result = await testLineWebhook(id);
+    const result = await testLineWebhook(id, me.sub);
 
     if (!result.success) {
       throw new AppError('ERR_PUSH_FAILED', result.message, 502);

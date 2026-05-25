@@ -8,11 +8,15 @@ import { transcribeAudio } from '@/lib/services/stt.service';
 import { transitionStatus } from '@/lib/services/task.service';
 import { getErrorMessage } from '@/lib/utils/format';
 
-export async function processTranscription(taskId: string, audioFilePath: string): Promise<void> {
+export async function processTranscription(
+  taskId: string,
+  userId: string,
+  audioFilePath: string
+): Promise<void> {
   await transitionStatus(taskId, 'transcribing');
 
   try {
-    const result = await transcribeAudio(audioFilePath);
+    const result = await transcribeAudio(userId, audioFilePath);
 
     // Store transcript in DB
     const transcriptData = {

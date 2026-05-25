@@ -1,10 +1,10 @@
 /**
  * LINE Messaging API Push Service
  * Sends meeting minutes to LINE groups via the Push Message API.
- * Reuses the DingTalkWebhook table:
- *   - name       -> LINE Bot name
- *   - webhookUrl -> LINE Group ID
- *   - secret     -> LINE Channel Access Token
+ * Uses the UserWebhook table (per-user):
+ *   - name         -> LINE Bot name
+ *   - groupId      -> LINE Group ID
+ *   - accessToken  -> LINE Channel Access Token
  */
 
 import prisma from '@/lib/db';
@@ -12,6 +12,7 @@ import { PUSH_MAX_RETRIES, PUSH_RETRY_DELAY_MS } from '@/lib/utils/constants';
 
 export interface PushPayload {
   taskId: string;
+  userId: string;
   webhookId?: string;
   markdownTitle: string;
   markdownContent: string;
@@ -119,21 +120,21 @@ async function sendToLine(
  * Records PushLog for each attempt.
  */
 export async function pushToLine(payload: PushPayload): Promise<PushResult[]> {
-  // Determine which webhook(s) to use
+  // Resolve owner's webhook(s) — scoped to payload.userId for tenant isolation
   let webhooks;
   if (payload.webhookId) {
-    const webhook = await prisma.dingTalkWebhook.findUnique({
-      where: { id: payload.webhookId },
+    const webhook = await prisma.userWebhook.findFirst({
+      where: { id: payload.webhookId, userId: payload.userId },
     });
     if (!webhook) throw new Error(`LINE Bot not found: ${payload.webhookId}`);
     if (!webhook.isActive) throw new Error(`LINE Bot is inactive: ${payload.webhookId}`);
     webhooks = [webhook];
   } else {
-    webhooks = await prisma.dingTalkWebhook.findMany({
-      where: { isDefault: true, isActive: true },
+    webhooks = await prisma.userWebhook.findMany({
+      where: { userId: payload.userId, isDefault: true, isActive: true },
     });
     if (webhooks.length === 0) {
-      throw new Error('No default active LINE Bots configured');
+      throw new Error('No default active LINE Bots configured for this user');
     }
   }
 
@@ -157,8 +158,8 @@ export async function pushToLine(payload: PushPayload): Promise<PushResult[]> {
     for (let attempt = 0; attempt < PUSH_MAX_RETRIES; attempt++) {
       try {
         const { statusCode, body } = await sendToLine(
-          webhook.webhookUrl, // Group ID
-          webhook.secret,     // Channel Access Token
+          webhook.groupId,
+          webhook.accessToken,
           messageText
         );
 
@@ -209,9 +210,9 @@ export async function pushToLine(payload: PushPayload): Promise<PushResult[]> {
 /**
  * Send a test message to a specific LINE Bot / Group.
  */
-export async function testLineWebhook(webhookId: string): Promise<{ success: boolean; message: string }> {
-  const webhook = await prisma.dingTalkWebhook.findUnique({
-    where: { id: webhookId },
+export async function testLineWebhook(webhookId: string, userId: string): Promise<{ success: boolean; message: string }> {
+  const webhook = await prisma.userWebhook.findFirst({
+    where: { id: webhookId, userId },
   });
 
   if (!webhook) {
@@ -227,8 +228,8 @@ export async function testLineWebhook(webhookId: string): Promise<{ success: boo
     ].join('\n');
 
     const { statusCode, body } = await sendToLine(
-      webhook.webhookUrl, // Group ID
-      webhook.secret,     // Channel Access Token
+      webhook.groupId,
+      webhook.accessToken,
       testMessage
     );
 
