@@ -23,7 +23,7 @@ interface Task {
   status: TaskStatus;
   progressPct: number;
   errorMsg: string | null;
-  audioFileSize: number;
+  audioFileSize: number | null;
   audioDuration: number | null;
   createdAt: string;
   updatedAt: string;
@@ -267,9 +267,9 @@ export default function TaskDetailPage() {
             </p>
           </div>
           <div>
-            <span className="text-gray-500">檔案大小</span>
+            <span className="text-gray-500">來源</span>
             <p className="font-medium text-gray-900 mt-0.5">
-              {formatFileSize(task.audioFileSize)}
+              {task.audioFileSize != null ? formatFileSize(task.audioFileSize) : '逐字稿輸入'}
             </p>
           </div>
           <div>

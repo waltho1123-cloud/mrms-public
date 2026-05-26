@@ -20,7 +20,7 @@ export const QUEUE_NAME = 'meeting-processing';
 export interface MeetingJobData {
   taskId: string;
   userId: string;
-  audioFilePath: string;
+  audioFilePath?: string;
   meetingTopic: string;
   meetingDate: string;
   participants?: string;

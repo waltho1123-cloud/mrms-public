@@ -6,6 +6,7 @@ import { getStoredToken } from '@/lib/utils/admin-fetch';
 interface UploadState {
   file: File | null;
   fileName: string;
+  transcriptText: string;
   progress: number;
   uploading: boolean;
   error: string | null;
@@ -21,6 +22,7 @@ interface UploadParams {
 
 interface UseTaskUploadReturn extends UploadState {
   setFile: (file: File) => void;
+  setTranscriptText: (text: string) => void;
   upload: (params: UploadParams) => Promise<string | null>;
   reset: () => void;
 }
@@ -29,30 +31,49 @@ export function useTaskUpload(): UseTaskUploadReturn {
   const [state, setState] = useState<UploadState>({
     file: null,
     fileName: '',
+    transcriptText: '',
     progress: 0,
     uploading: false,
     error: null,
     taskId: null,
   });
   const fileRef = useRef<File | null>(null);
+  const transcriptRef = useRef<string>('');
 
   const setFile = useCallback((file: File) => {
     fileRef.current = file;
+    transcriptRef.current = '';
     setState((prev) => ({
       ...prev,
       file,
       fileName: file.name,
+      transcriptText: '',
       error: null,
       taskId: null,
       progress: 0,
     }));
   }, []);
 
+  const setTranscriptText = useCallback((text: string) => {
+    transcriptRef.current = text;
+    fileRef.current = null;
+    setState((prev) => ({
+      ...prev,
+      transcriptText: text,
+      file: null,
+      fileName: '',
+      error: null,
+      // do not reset taskId/progress on every keystroke; just on submit
+    }));
+  }, []);
+
   const upload = useCallback(
     async (params: UploadParams): Promise<string | null> => {
       const currentFile = fileRef.current;
-      if (!currentFile) {
-        setState((prev) => ({ ...prev, error: '請先選擇音檔' }));
+      const currentTranscript = transcriptRef.current.trim();
+
+      if (!currentFile && !currentTranscript) {
+        setState((prev) => ({ ...prev, error: '請選擇音檔或輸入逐字稿' }));
         return null;
       }
 
@@ -60,7 +81,11 @@ export function useTaskUpload(): UseTaskUploadReturn {
 
       try {
         const formData = new FormData();
-        formData.append('audioFile', currentFile);
+        if (currentFile) {
+          formData.append('audioFile', currentFile);
+        } else {
+          formData.append('transcriptText', currentTranscript);
+        }
         formData.append('meetingTopic', params.meetingTopic);
         formData.append('meetingDate', params.meetingDate);
         if (params.participants) {
@@ -70,7 +95,9 @@ export function useTaskUpload(): UseTaskUploadReturn {
           formData.append('promptTemplateId', params.promptTemplateId);
         }
 
-        // Simulate progress with XMLHttpRequest for upload tracking
+        // XHR upload — progress bar is meaningful for audio files; for
+        // transcript-only submissions the request body is small so the
+        // bar just jumps to 100%, which is fine.
         const taskId = await new Promise<string>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
 
@@ -137,9 +164,11 @@ export function useTaskUpload(): UseTaskUploadReturn {
 
   const reset = useCallback(() => {
     fileRef.current = null;
+    transcriptRef.current = '';
     setState({
       file: null,
       fileName: '',
+      transcriptText: '',
       progress: 0,
       uploading: false,
       error: null,
@@ -150,6 +179,7 @@ export function useTaskUpload(): UseTaskUploadReturn {
   return {
     ...state,
     setFile,
+    setTranscriptText,
     upload,
     reset,
   };

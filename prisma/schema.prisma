@@ -76,8 +76,8 @@ model MeetingTask {
   meetingTopic  String
   meetingDate   DateTime   @default(now())
   participants  String?
-  audioFilePath String
-  audioFileSize Int
+  audioFilePath String?
+  audioFileSize Int?
   audioDuration Int?
   status        TaskStatus @default(uploaded)
   progressPct   Int        @default(0)

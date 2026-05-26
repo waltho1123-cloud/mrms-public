@@ -21,6 +21,7 @@ export default function HomePage() {
   const [authChecked, setAuthChecked] = useState(false);
   const [hasOpenAiKey, setHasOpenAiKey] = useState<boolean | null>(null);
 
+  const [sourceMode, setSourceMode] = useState<'audio' | 'transcript'>('audio');
   const [meetingTopic, setMeetingTopic] = useState('');
   const [meetingDate, setMeetingDate] = useState(new Date().toISOString().split('T')[0]);
   const [participants, setParticipants] = useState('');
@@ -88,7 +89,11 @@ export default function HomePage() {
     e.preventDefault();
     setFormError('');
     if (!meetingTopic.trim()) { setFormError('請輸入會議主題'); return; }
-    if (!upload.file) { setFormError('請選擇音檔'); return; }
+    if (sourceMode === 'audio' && !upload.file) { setFormError('請選擇音檔'); return; }
+    if (sourceMode === 'transcript' && !upload.transcriptText.trim()) {
+      setFormError('請貼入逐字稿內容');
+      return;
+    }
 
     const taskId = await upload.upload({
       meetingTopic: meetingTopic.trim(),
@@ -100,6 +105,14 @@ export default function HomePage() {
       setTaskStatus('uploaded');
       setTaskProgress(10);
     }
+  };
+
+  const handleSwitchMode = (mode: 'audio' | 'transcript') => {
+    if (mode === sourceMode || isProcessing) return;
+    setSourceMode(mode);
+    setFormError('');
+    // hook keeps the two sources mutually exclusive; clear via setters
+    if (mode === 'audio') upload.setTranscriptText('');
   };
 
   const isProcessing = upload.uploading || (upload.taskId && taskStatus !== 'completed' && taskStatus !== 'error');
@@ -177,19 +190,70 @@ export default function HomePage() {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">上傳會議錄音</h1>
-        <p className="mt-1 text-sm text-gray-500">上傳音檔後，系統將自動進行語音轉錄與摘要整理</p>
+        <h1 className="text-2xl font-bold text-gray-900">上傳會議內容</h1>
+        <p className="mt-1 text-sm text-gray-500">上傳音檔或貼入逐字稿，系統會自動整理為結構化會議紀錄</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">音檔上傳</h2>
-          <FileUpload
-            onFileSelect={upload.setFile}
-            fileName={upload.fileName}
-            progress={upload.uploading ? upload.progress : undefined}
-            disabled={!!isProcessing}
-          />
+          <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg mb-4 w-full max-w-xs">
+            <button
+              type="button"
+              onClick={() => handleSwitchMode('audio')}
+              disabled={!!isProcessing}
+              className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                sourceMode === 'audio'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              } disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              音檔
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwitchMode('transcript')}
+              disabled={!!isProcessing}
+              className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                sourceMode === 'transcript'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              } disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              逐字稿
+            </button>
+          </div>
+
+          {sourceMode === 'audio' ? (
+            <>
+              <h2 className="text-sm font-semibold text-gray-900 mb-3">音檔上傳</h2>
+              <FileUpload
+                onFileSelect={upload.setFile}
+                fileName={upload.fileName}
+                progress={upload.uploading ? upload.progress : undefined}
+                disabled={!!isProcessing}
+              />
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold text-gray-900">逐字稿內容</h2>
+                <span className="text-xs text-gray-500">
+                  {upload.transcriptText.length.toLocaleString()} 字元
+                </span>
+              </div>
+              <textarea
+                value={upload.transcriptText}
+                onChange={(e) => upload.setTranscriptText(e.target.value)}
+                disabled={!!isProcessing}
+                rows={10}
+                placeholder="貼入您已有的會議逐字稿（純文字）。可從會議室錄音轉錄、Zoom 字幕、或其他工具匯出。"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:cursor-not-allowed font-mono"
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                跳過語音轉錄階段，直接進行 AI 摘要整理（不消耗 STT 配額）
+              </p>
+            </>
+          )}
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
@@ -219,7 +283,16 @@ export default function HomePage() {
         )}
 
         {!upload.taskId && (
-          <Button type="submit" size="lg" className="w-full" loading={upload.uploading} disabled={upload.uploading || !upload.file}>
+          <Button
+            type="submit"
+            size="lg"
+            className="w-full"
+            loading={upload.uploading}
+            disabled={
+              upload.uploading ||
+              (sourceMode === 'audio' ? !upload.file : !upload.transcriptText.trim())
+            }
+          >
             {upload.uploading ? '上傳中...' : '開始處理'}
           </Button>
         )}

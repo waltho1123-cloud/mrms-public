@@ -18,9 +18,11 @@ import { assertPromptAccessible } from '@/lib/services/ai.service';
 import meetingQueue from '@/lib/queue/queue';
 import { requireUser } from '@/lib/utils/auth';
 import { getApiKey } from '@/lib/settings/api-keys';
+import prisma from '@/lib/db';
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/tmp/mrms-uploads';
 const AUTO_PUSH = process.env.AUTO_PUSH === 'true';
+const MAX_TRANSCRIPT_CHARS = 500_000;
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,14 +42,18 @@ export async function POST(request: NextRequest) {
 
     // Extract fields
     const audioFile = formData.get('audioFile') as File | null;
+    const transcriptText = (formData.get('transcriptText') as string | null)?.trim() || '';
     const meetingTopic = formData.get('meetingTopic') as string | null;
     const meetingDate = formData.get('meetingDate') as string | null;
     const participants = formData.get('participants') as string | null;
     const promptTemplateId = formData.get('promptTemplateId') as string | null;
 
-    // Validate required fields
-    if (!audioFile) {
-      throw new AppError('ERR_VALIDATION', 'audioFile is required', 400);
+    // Validate required fields — must provide exactly one source
+    if (!audioFile && !transcriptText) {
+      throw new AppError('ERR_VALIDATION', '請提供音檔或逐字稿', 400);
+    }
+    if (audioFile && transcriptText) {
+      throw new AppError('ERR_VALIDATION', '音檔與逐字稿只能擇一', 400);
     }
 
     // If a specific prompt was selected, reject up-front. Otherwise the
@@ -59,52 +65,6 @@ export async function POST(request: NextRequest) {
       throw new AppError('ERR_VALIDATION', 'meetingTopic is required', 400);
     }
 
-    // Validate file extension
-    const ext = path.extname(audioFile.name).toLowerCase().replace('.', '');
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      throw new AppError(
-        'ERR_VALIDATION',
-        `Unsupported file type: .${ext}. Allowed: ${ALLOWED_EXTENSIONS.join(', ')}`,
-        400
-      );
-    }
-
-    // Validate MIME type (additional layer of security)
-    if (audioFile.type && !ALLOWED_AUDIO_TYPES.includes(audioFile.type)) {
-      throw new AppError(
-        'ERR_VALIDATION',
-        `Unsupported MIME type: ${audioFile.type}`,
-        400
-      );
-    }
-
-    // Validate file size
-    if (audioFile.size > MAX_FILE_SIZE_BYTES) {
-      throw new AppError(
-        'ERR_VALIDATION',
-        `File too large. Maximum: ${process.env.MAX_FILE_SIZE_MB || 200}MB`,
-        400
-      );
-    }
-
-    // Ensure upload directory exists
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-    // Save file to disk - use UUID for filename to prevent path traversal
-    const fileId = uuidv4();
-    const fileName = `${fileId}.${ext}`;
-    const filePath = path.join(UPLOAD_DIR, fileName);
-
-    // Verify the resolved path is within the upload directory
-    const resolvedPath = path.resolve(filePath);
-    const resolvedUploadDir = path.resolve(UPLOAD_DIR);
-    if (!resolvedPath.startsWith(resolvedUploadDir)) {
-      throw new AppError('ERR_VALIDATION', 'Invalid file path', 400);
-    }
-
-    const arrayBuffer = await audioFile.arrayBuffer();
-    await fs.promises.writeFile(filePath, Buffer.from(arrayBuffer));
-
     // Validate meeting date if provided
     let parsedMeetingDate: Date | undefined;
     if (meetingDate) {
@@ -114,15 +74,90 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create task in DB (owned by the calling user)
+    let filePath: string | undefined;
+    let fileSize: number | undefined;
+
+    if (audioFile) {
+      // Validate file extension
+      const ext = path.extname(audioFile.name).toLowerCase().replace('.', '');
+      if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        throw new AppError(
+          'ERR_VALIDATION',
+          `Unsupported file type: .${ext}. Allowed: ${ALLOWED_EXTENSIONS.join(', ')}`,
+          400
+        );
+      }
+
+      // Validate MIME type (additional layer of security)
+      if (audioFile.type && !ALLOWED_AUDIO_TYPES.includes(audioFile.type)) {
+        throw new AppError(
+          'ERR_VALIDATION',
+          `Unsupported MIME type: ${audioFile.type}`,
+          400
+        );
+      }
+
+      // Validate file size
+      if (audioFile.size > MAX_FILE_SIZE_BYTES) {
+        throw new AppError(
+          'ERR_VALIDATION',
+          `File too large. Maximum: ${process.env.MAX_FILE_SIZE_MB || 200}MB`,
+          400
+        );
+      }
+
+      // Ensure upload directory exists
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+      // Save file to disk - use UUID for filename to prevent path traversal
+      const fileId = uuidv4();
+      const fileName = `${fileId}.${ext}`;
+      const candidate = path.join(UPLOAD_DIR, fileName);
+
+      // Verify the resolved path is within the upload directory
+      const resolvedPath = path.resolve(candidate);
+      const resolvedUploadDir = path.resolve(UPLOAD_DIR);
+      if (!resolvedPath.startsWith(resolvedUploadDir)) {
+        throw new AppError('ERR_VALIDATION', 'Invalid file path', 400);
+      }
+
+      const arrayBuffer = await audioFile.arrayBuffer();
+      await fs.promises.writeFile(candidate, Buffer.from(arrayBuffer));
+      filePath = candidate;
+      fileSize = audioFile.size;
+    } else {
+      // Transcript-only path
+      if (transcriptText.length > MAX_TRANSCRIPT_CHARS) {
+        throw new AppError(
+          'ERR_VALIDATION',
+          `逐字稿過長，最多 ${MAX_TRANSCRIPT_CHARS.toLocaleString()} 字元`,
+          400
+        );
+      }
+    }
+
+    // Create task in DB (owned by the calling user). For transcript-only
+    // submissions audioFilePath/Size are left null.
     const taskId = await createTask({
       userId: me.sub,
       meetingTopic: meetingTopic.trim(),
       meetingDate: parsedMeetingDate,
       participants: participants?.trim() || undefined,
       audioFilePath: filePath,
-      audioFileSize: audioFile.size,
+      audioFileSize: fileSize,
     });
+
+    // For transcript-only flow: pre-populate the Transcript row so the
+    // summarizer has its input and the transcribe stage can be skipped.
+    if (transcriptText) {
+      await prisma.transcript.create({
+        data: {
+          taskId,
+          rawText: transcriptText,
+          wordCount: transcriptText.length,
+        },
+      });
+    }
 
     // Transition to queued and add to BullMQ
     await transitionStatus(taskId, 'queued');

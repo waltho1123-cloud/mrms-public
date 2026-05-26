@@ -17,7 +17,7 @@ interface TaskItem {
   participants: string | null;
   status: TaskStatus;
   progressPct: number;
-  audioFileSize: number;
+  audioFileSize: number | null;
   createdAt: string;
   updatedAt: string;
 }

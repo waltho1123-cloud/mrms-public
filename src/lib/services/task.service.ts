@@ -12,7 +12,7 @@ import { TASK_STATUS_PROGRESS } from '@/lib/utils/constants';
  */
 const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   uploaded: ['queued', 'error'],
-  queued: ['transcribing', 'error'],
+  queued: ['transcribing', 'summarizing', 'error'],
   transcribing: ['summarizing', 'error'],
   summarizing: ['review', 'pushing', 'error'],
   review: ['pushing', 'summarizing', 'error'],
@@ -71,8 +71,8 @@ export async function createTask(data: {
   meetingTopic: string;
   meetingDate?: Date;
   participants?: string;
-  audioFilePath: string;
-  audioFileSize: number;
+  audioFilePath?: string;
+  audioFileSize?: number;
 }): Promise<string> {
   const task = await prisma.meetingTask.create({
     data: {

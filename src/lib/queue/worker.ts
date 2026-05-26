@@ -30,8 +30,12 @@ async function processJob(job: Job<JobData>): Promise<void> {
     // Full pipeline: transcribe -> summarize -> (optional push)
     const { taskId, userId, audioFilePath, meetingTopic, meetingDate, participants, promptTemplateId, autoPush } = data;
 
-    // Stage 1: Transcription (uses owner's OpenAI key)
-    await processTranscription(taskId, userId, audioFilePath);
+    // Stage 1: Transcription (uses owner's OpenAI key).
+    // Skipped when the user supplied a transcript directly — in that case
+    // the API route already wrote the Transcript row before queueing.
+    if (audioFilePath) {
+      await processTranscription(taskId, userId, audioFilePath);
+    }
 
     // Stage 2: Summarization
     await processSummarization(taskId, userId, meetingTopic, meetingDate, participants, promptTemplateId);
