@@ -613,6 +613,45 @@ function MeSettingsInner() {
               </div>
             )}
           </section>
+
+          <section className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">使用者設定指南</h2>
+                <p className="text-xs text-gray-500 mt-0.5">OpenAI API Key 與 LINE Bot 完整設定步驟、常見錯誤排解</p>
+              </div>
+              <a
+                href="/user-settings-guide.pdf"
+                download="使用者設定指南.pdf"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 transition"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
+                </svg>
+                下載 PDF
+              </a>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <object
+                data="/user-settings-guide.pdf#view=FitH&toolbar=1"
+                type="application/pdf"
+                className="w-full h-[640px]"
+                aria-label="使用者設定指南 PDF"
+              >
+                <div className="p-6 text-center text-sm text-gray-500">
+                  <p className="mb-2">您的瀏覽器無法直接預覽 PDF。</p>
+                  <a
+                    href="/user-settings-guide.pdf"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-700 underline"
+                  >
+                    點此另開視窗查看
+                  </a>
+                </div>
+              </object>
+            </div>
+          </section>
         </>
       )}
 
