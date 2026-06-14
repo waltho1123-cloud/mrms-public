@@ -8,6 +8,7 @@ import TextArea from '@/components/ui/TextArea';
 import Select from '@/components/ui/Select';
 import Modal from '@/components/ui/Modal';
 import StatusTracker from '@/components/ui/StatusTracker';
+import { humanizeError } from '@/lib/utils/error-messages';
 import MarkdownPreview from '@/components/ui/MarkdownPreview';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useSSE } from '@/lib/hooks/useSSE';
@@ -124,6 +125,10 @@ export default function TaskDetailPage() {
               typeof data.progressPct === 'number'
                 ? data.progressPct
                 : prev.progressPct,
+            errorMsg:
+              data.errorMsg !== undefined
+                ? (data.errorMsg as string | null)
+                : prev.errorMsg,
           };
         });
         // Refresh full task on key status changes
@@ -291,16 +296,23 @@ export default function TaskDetailPage() {
       {!isTerminal && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">處理進度</h2>
-          <StatusTracker status={task.status} progressPct={task.progressPct} />
+          <StatusTracker status={task.status} progressPct={task.progressPct} errorMsg={task.errorMsg} />
         </div>
       )}
 
       {/* Error Message */}
-      {task.errorMsg && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-sm text-red-700">
-          <span className="font-medium">錯誤訊息：</span> {task.errorMsg}
-        </div>
-      )}
+      {task.errorMsg && (() => {
+        const friendly = humanizeError(task.errorMsg);
+        return (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-sm text-red-700">
+            <p className="font-medium">{friendly.title}</p>
+            {friendly.hint && friendly.hint !== task.errorMsg && (
+              <p className="mt-1 text-red-600">{friendly.hint}</p>
+            )}
+            <p className="mt-2 text-xs text-red-500 break-words">技術細節：{task.errorMsg}</p>
+          </div>
+        );
+      })()}
 
       {/* Meeting Minutes */}
       {latestMinutes && (

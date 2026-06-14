@@ -2,10 +2,13 @@
 
 import React from 'react';
 import type { TaskStatus } from '@/lib/types';
+import { humanizeError } from '@/lib/utils/error-messages';
 
 interface StatusTrackerProps {
   status: TaskStatus;
   progressPct?: number;
+  /** Raw error message from the backend; humanized for display when status is 'error'. */
+  errorMsg?: string | null;
   className?: string;
 }
 
@@ -34,6 +37,7 @@ const statusOrder: Record<string, number> = {
 export default function StatusTracker({
   status,
   progressPct,
+  errorMsg,
   className = '',
 }: StatusTrackerProps) {
   const currentIdx = statusOrder[status] ?? -1;
@@ -43,18 +47,26 @@ export default function StatusTracker({
   return (
     <div className={className}>
       {/* Error banner */}
-      {isError && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
-          <svg className="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-              clipRule="evenodd"
-            />
-          </svg>
-          處理過程中發生錯誤
-        </div>
-      )}
+      {isError && (() => {
+        const friendly = humanizeError(errorMsg);
+        return (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-sm text-red-700">
+            <svg className="w-5 h-5 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <div className="min-w-0">
+              <p className="font-medium">{friendly.title}</p>
+              {friendly.hint && (
+                <p className="mt-0.5 text-xs text-red-600 break-words">{friendly.hint}</p>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {isPushFailed && (
         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-sm text-amber-700">

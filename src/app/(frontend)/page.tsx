@@ -31,6 +31,7 @@ export default function HomePage() {
 
   const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null);
   const [taskProgress, setTaskProgress] = useState(0);
+  const [taskError, setTaskError] = useState<string | null>(null);
 
   useEffect(() => {
     setMe(getStoredUser());
@@ -77,6 +78,7 @@ export default function HomePage() {
         const data = event.data as Record<string, unknown>;
         if (data.status) setTaskStatus(data.status as TaskStatus);
         if (typeof data.progressPct === 'number') setTaskProgress(data.progressPct);
+        if (data.errorMsg !== undefined) setTaskError((data.errorMsg as string | null) ?? null);
         if (data.status === 'review' || data.status === 'completed') {
           setTimeout(() => { router.push(`/tasks/${upload.taskId}`); }, 1500);
         }
@@ -104,6 +106,7 @@ export default function HomePage() {
     if (taskId) {
       setTaskStatus('uploaded');
       setTaskProgress(10);
+      setTaskError(null);
     }
   };
 
@@ -307,7 +310,7 @@ export default function HomePage() {
               <span className="text-xs text-gray-500">{sseConnected ? '即時更新中' : '連線中...'}</span>
             </div>
           </div>
-          <StatusTracker status={taskStatus} progressPct={taskProgress} />
+          <StatusTracker status={taskStatus} progressPct={taskProgress} errorMsg={taskError} />
           {(taskStatus === 'review' || taskStatus === 'completed') && (
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600 mb-3">處理完成！即將跳轉至詳情頁...</p>
@@ -316,8 +319,18 @@ export default function HomePage() {
           )}
           {taskStatus === 'error' && (
             <div className="mt-6 text-center">
-              <p className="text-sm text-red-600 mb-3">處理失敗，請重新上傳</p>
-              <Button variant="secondary" onClick={upload.reset}>重新上傳</Button>
+              <p className="text-sm text-gray-600 mb-3">請依上方提示調整後重新上傳</p>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  upload.reset();
+                  setTaskStatus(null);
+                  setTaskProgress(0);
+                  setTaskError(null);
+                }}
+              >
+                重新上傳
+              </Button>
             </div>
           )}
         </div>
