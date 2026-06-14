@@ -9,10 +9,18 @@ import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import OpenAI from 'openai';
+import ffmpegStatic from 'ffmpeg-static';
+import { path as ffprobeStaticPath } from 'ffprobe-static';
 import { STT_MAX_FILE_SIZE } from '@/lib/utils/constants';
 import { getApiKey } from '@/lib/settings/api-keys';
 
 const execFileAsync = promisify(execFile);
+
+// The deploy container (Zeabur zbpack Node image) has no system ffmpeg/ffprobe,
+// so point at the binaries bundled by ffmpeg-static / ffprobe-static. Fall back
+// to the system PATH name if a static path is somehow unavailable.
+const FFMPEG_PATH = ffmpegStatic || 'ffmpeg';
+const FFPROBE_PATH = ffprobeStaticPath || 'ffprobe';
 
 async function getOpenAI(userId: string): Promise<OpenAI> {
   const apiKey = await getApiKey(userId, 'OPENAI_API_KEY');
@@ -74,7 +82,7 @@ async function transcribeSingle(userId: string, filePath: string, retries = 3): 
  */
 async function getAudioDuration(filePath: string): Promise<number> {
   try {
-    const { stdout } = await execFileAsync('ffprobe', [
+    const { stdout } = await execFileAsync(FFPROBE_PATH, [
       '-v', 'quiet',
       '-show_entries', 'format=duration',
       '-of', 'csv=p=0',
@@ -103,7 +111,7 @@ async function splitAudio(
     args.push('-to', String(endTime));
   }
   args.push('-c', 'copy', outputPath);
-  await execFileAsync('ffmpeg', args);
+  await execFileAsync(FFMPEG_PATH, args);
   return outputPath;
 }
 
@@ -160,7 +168,7 @@ function cleanupChunks(chunks: string[], originalPath: string): void {
 async function normalizeAudio(filePath: string): Promise<string> {
   const normalizedPath = filePath.replace(/(\.[^.]+)$/, '_normalized.mp3');
   try {
-    await execFileAsync('ffmpeg', [
+    await execFileAsync(FFMPEG_PATH, [
       '-y', '-i', filePath,
       '-ar', '16000', '-ac', '1', '-b:a', '48k',
       '-map_metadata', '-1',
